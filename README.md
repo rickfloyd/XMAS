@@ -1,2 +1,3 @@
 # XMAS
-IM FUCKING IRATTATED AT THIS POINT FUCK THIS SHIT 
+
+A Christmas-themed project. 
