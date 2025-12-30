@@ -1,0 +1,347 @@
+BLOCKS OF CODE  
+
+BLOCK 0 — Folder layout (what goes where)
+
+Purpose: creates a clean place for the “Quantum engine” inside your repo without mixing it with UI.
+
+Paste/run in terminal at repo root:
+
+mkdir -p src/quantum/{core,indicators,signals,types,utils}
+
+BLOCK 1 — Types (contracts the UI/backend will share)
+
+Purpose: defines the data structures: candles, quantum state, signals.
+
+Create file: src/quantum/types/types.ts
+
+export type Timeframe = "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
+
+export type Candle = {
+  t: number;   // unix ms
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v?: number;
+};
+
+export type QuantumState = {
+  symbol: string;
+  timeframe: Timeframe;
+  asOf: number; // unix ms
+
+  // “Quantum-inspired” metrics (real math; visualization-friendly)
+  probabilityUp: number;       // 0..1
+  probabilityDown: number;     // 0..1
+  entropy: number;             // 0..1 (uncertainty)
+  phase: number;               // 0..2π (cycle angle)
+  coherence: number;           // 0..1 (stability)
+  energy: number;              // 0..1 (trend/impulse strength)
+  volatility: number;          // annualized-ish or scaled
+};
+
+export type TradingSignalType = "BUY" | "SELL" | "HOLD";
+
+export type TradingSignal = {
+  symbol: string;
+  timeframe: Timeframe;
+  asOf: number;
+
+  type: TradingSignalType;
+  confidence: number;          // 0..1
+  entry: number;
+  target: number;
+  stop: number;
+
+  state: QuantumState;
+  reasoning: string[];
+};
+
+BLOCK 2 — Math utilities (safe normalization + stats)
+
+Purpose: basic math used everywhere; avoids NaNs and weirdness.
+
+Create file: src/quantum/utils/math.ts
+
+export function clamp(x: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, x));
+}
+
+export function mean(xs: number[]) {
+  if (!xs.length) return 0;
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+
+export function stdev(xs: number[]) {
+  if (xs.length < 2) return 0;
+  const m = mean(xs);
+  const v = mean(xs.map(x => (x - m) ** 2));
+  return Math.sqrt(v);
+}
+
+export function zscore(x: number, xs: number[]) {
+  const s = stdev(xs);
+  if (s === 0) return 0;
+  return (x - mean(xs)) / s;
+}
+
+// Simple logistic squashing to 0..1
+export function sigmoid(x: number) {
+  // avoid overflow
+  const v = clamp(x, -20, 20);
+  return 1 / (1 + Math.exp(-v));
+}
+
+// Shannon entropy for a Bernoulli(p) normalized 0..1
+export function bernoulliEntropy(p: number) {
+  const q = 1 - p;
+  const pp = clamp(p, 1e-9, 1 - 1e-9);
+  const qq = clamp(q, 1e-9, 1 - 1e-9);
+  const h = -(pp * Math.log2(pp) + qq * Math.log2(qq)); // 0..1
+  return clamp(h, 0, 1);
+}
+
+BLOCK 3 — Returns + volatility (real, stable features)
+
+Purpose: compute log returns and a robust volatility estimate.
+
+Create file: src/quantum/indicators/returns.ts
+
+import type { Candle } from "../types/types";
+import { mean, stdev } from "../utils/math";
+
+export function closes(candles: Candle[]) {
+  return candles.map(c => c.c);
+}
+
+export function logReturns(candles: Candle[]) {
+  const cs = closes(candles);
+  const r: number[] = [];
+  for (let i = 1; i < cs.length; i++) {
+    const a = cs[i - 1];
+    const b = cs[i];
+    if (a > 0 && b > 0) r.push(Math.log(b / a));
+  }
+  return r;
+}
+
+// Volatility scaled by sqrt(n) per window; caller can annualize if desired.
+export function realizedVolatility(returns: number[]) {
+  const s = stdev(returns);
+  return s;
+}
+
+export function returnDrift(returns: number[]) {
+  return mean(returns);
+}
+
+BLOCK 4 — Trend “energy” + cycle “phase”
+
+Purpose: gives you a trend strength (energy) and a cycle angle (phase) without fake quantum.
+
+Create file: src/quantum/indicators/phaseEnergy.ts
+
+import type { Candle } from "../types/types";
+import { clamp, mean, stdev } from "../utils/math";
+import { logReturns } from "./returns";
+
+// Energy = normalized slope / volatility proxy
+export function computeEnergy(candles: Candle[]) {
+  const rs = logReturns(candles);
+  if (rs.length < 10) return 0;
+
+  const m = mean(rs);
+  const s = stdev(rs);
+  const z = s === 0 ? 0 : m / s; // signal-to-noise
+  return clamp(Math.abs(z) / 3, 0, 1); // 3σ ~ max
+}
+
+// Phase = angle of last return relative to rolling distribution
+export function computePhase(candles: Candle[]) {
+  const rs = logReturns(candles);
+  if (rs.length < 10) return 0;
+
+  const last = rs[rs.length - 1];
+  const m = mean(rs);
+  const s = stdev(rs) || 1e-9;
+  const z = (last - m) / s; // where are we in the return cycle?
+
+  // map z to angle: negative -> near π, positive -> near 0, smooth
+  const a = Math.atan2(0.75, z); // stable mapping
+  // normalize to 0..2π
+  let phase = a;
+  if (phase < 0) phase += 2 * Math.PI;
+  return phase;
+}
+
+BLOCK 5 — Coherence (market “stability” score)
+
+Purpose: coherence = “how stable is this regime?” based on variance of returns and entropy.
+
+Create file: src/quantum/indicators/coherence.ts
+
+import type { Candle } from "../types/types";
+import { clamp, bernoulliEntropy, mean, stdev, sigmoid } from "../utils/math";
+import { logReturns } from "./returns";
+
+// coherence high when returns distribution is tight AND direction probability is decisive
+export function computeCoherence(candles: Candle[]) {
+  const rs = logReturns(candles);
+  if (rs.length < 20) return 0;
+
+  const s = stdev(rs);
+  const drift = mean(rs);
+
+  // probability up from drift / vol (a soft classifier)
+  const pUp = sigmoid(drift / (s || 1e-9));
+  const ent = bernoulliEntropy(pUp); // 0..1, higher = more uncertainty
+
+  // low vol => higher coherence; high entropy => lower coherence
+  const volScore = clamp(1 / (1 + 25 * s), 0, 1);
+  const coherence = clamp(volScore * (1 - ent), 0, 1);
+  return coherence;
+}
+
+BLOCK 6 — Quantum state builder (one function = one chart panel)
+
+Purpose: turns candles into a QuantumState your UI can render.
+
+Create file: src/quantum/core/state.ts
+
+import type { Candle, QuantumState, Timeframe } from "../types/types";
+import { clamp, sigmoid, bernoulliEntropy } from "../utils/math";
+import { logReturns, realizedVolatility, returnDrift } from "../indicators/returns";
+import { computeEnergy, computePhase } from "../indicators/phaseEnergy";
+import { computeCoherence } from "../indicators/coherence";
+
+export function buildQuantumState(symbol: string, timeframe: Timeframe, candles: Candle[]): QuantumState {
+  const rs = logReturns(candles);
+  const drift = returnDrift(rs);
+  const vol = realizedVolatility(rs);
+
+  const pUp = sigmoid(drift / (vol || 1e-9));
+  const pDown = 1 - pUp;
+  const entropy = bernoulliEntropy(pUp);
+
+  const energy = computeEnergy(candles);
+  const phase = computePhase(candles);
+  const coherence = computeCoherence(candles);
+
+  return {
+    symbol,
+    timeframe,
+    asOf: candles.length ? candles[candles.length - 1].t : Date.now(),
+
+    probabilityUp: clamp(pUp, 0, 1),
+    probabilityDown: clamp(pDown, 0, 1),
+    entropy,
+    phase,
+    coherence,
+    energy,
+    volatility: vol,
+  };
+}
+
+BLOCK 7 — Signal generator (BUY/SELL/HOLD with target/stop)
+
+Purpose: uses the quantum state + ATR-like banding from volatility to produce a signal.
+
+Create file: src/quantum/signals/generate.ts
+
+import type { Candle, TradingSignal, Timeframe } from "../types/types";
+import { clamp } from "../utils/math";
+import { buildQuantumState } from "../core/state";
+import { logReturns } from "../indicators/returns";
+import { stdev } from "../utils/math";
+
+export function generateSignal(symbol: string, timeframe: Timeframe, candles: Candle[]): TradingSignal {
+  const state = buildQuantumState(symbol, timeframe, candles);
+  const last = candles[candles.length - 1];
+  const price = last?.c ?? 0;
+
+  // use return volatility to create bands (simple + robust)
+  const rs = logReturns(candles);
+  const rv = stdev(rs); // return vol
+  const band = clamp(rv * 3, 0.002, 0.08); // 0.2%..8% typical
+
+  // Decision rules (tunable)
+  const buyEdge = state.probabilityUp - 0.5;
+  const sellEdge = state.probabilityDown - 0.5;
+
+  let type: "BUY" | "SELL" | "HOLD" = "HOLD";
+  let confidence = 0.5;
+
+  const reasoning: string[] = [];
+  reasoning.push(`pUp=${state.probabilityUp.toFixed(2)} entropy=${state.entropy.toFixed(2)} coherence=${state.coherence.toFixed(2)} energy=${state.energy.toFixed(2)}`);
+
+  // Only act when coherence is decent and uncertainty low
+  if (state.coherence > 0.35 && state.entropy < 0.85) {
+    if (buyEdge > 0.08 && state.energy > 0.35) {
+      type = "BUY";
+      confidence = clamp(0.5 + buyEdge + state.coherence * 0.2 + state.energy * 0.2, 0, 1);
+      reasoning.push("BUY because pUp edge + energy + coherence");
+    } else if (sellEdge > 0.08 && state.energy > 0.35) {
+      type = "SELL";
+      confidence = clamp(0.5 + sellEdge + state.coherence * 0.2 + state.energy * 0.2, 0, 1);
+      reasoning.push("SELL because pDown edge + energy + coherence");
+    } else {
+      reasoning.push("HOLD because edge not strong enough");
+    }
+  } else {
+    reasoning.push("HOLD because low coherence or high entropy (unstable)");
+  }
+
+  // Targets/stops: symmetric banding (you can replace with ATR later)
+  const dir = type === "BUY" ? 1 : type === "SELL" ? -1 : 0;
+
+  const target = dir === 0 ? price : price * (1 + dir * band * 2.0);
+  const stop = dir === 0 ? price : price * (1 - dir * band * 1.2);
+
+  return {
+    symbol,
+    timeframe,
+    asOf: state.asOf,
+    type,
+    confidence,
+    entry: price,
+    target,
+    stop,
+    state,
+    reasoning,
+  };
+}
+
+BLOCK 8 — Quick test runner (proves it works)
+
+Purpose: lets you test the engine with dummy candles so you know the pipeline runs.
+
+Create file: src/quantum/core/demo.ts
+
+import type { Candle } from "../types/types";
+import { generateSignal } from "../signals/generate";
+
+function fakeCandles(n = 200, start = 100): Candle[] {
+  const out: Candle[] = [];
+  let p = start;
+  let t = Date.now() - n * 60_000;
+  for (let i = 0; i < n; i++) {
+    const rnd = (Math.random() - 0.5) * 0.01; // +/- 1%
+    const o = p;
+    p = Math.max(1, p * (1 + rnd));
+    const c = p;
+    const h = Math.max(o, c) * (1 + Math.random() * 0.003);
+    const l = Math.min(o, c) * (1 - Math.random() * 0.003);
+    out.push({ t, o, h, l, c, v: 1000 + Math.random() * 500 });
+    t += 60_000;
+  }
+  return out;
+}
+
+const candles = fakeCandles();
+const sig = generateSignal("DEMO", "15m", candles);
+console.log(JSON.stringify(sig, null, 2));
+
+
+Run it (Node supports TS? If not, we’ll run through tsx):
+
+npx tsx src/quantum/core/demo.ts

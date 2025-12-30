@@ -1,0 +1,330 @@
+TICKER stores and retrieves:
+
+ (default TTL 5 seconds)
+
+
+
+
+1) Where this file goes (important)
+
+Your other code imports it like this:
+
+import { CacheService } from './cache';
+
+
+So this file must be named:
+
+✅ cache.ts
+…and it must sit in the same folder as the file that imports it (the WebSocketService file).
+
+2) Notepad save steps (do this exactly)
+
+Open Notepad
+
+Click File → New
+
+Copy ALL the code from Section 3 below
+
+Paste into Notepad
+
+Click File → Save As…
+
+Navigate to the folder where your WebSocket file is (the one that says from './cache')
+
+Set Save as type: All Files (*.*)
+
+File name: cache.ts
+
+Click Save
+
+3) UPDATED cache.ts (copy everything)
+import IORedis from 'ioredis';
+import { Decimal } from 'decimal.js';
+import { CacheKeys, Ticker, OrderBook, Candle, Trade } from '@/types';
+
+export class CacheService {
+  private redis: IORedis;
+  private subscriber?: IORedis;
+
+  constructor() {
+    this.redis = this.createRedisClient();
+
+    this.redis.on('error', (error) => {
+      console.error('Redis connection error:', error);
+    });
+
+    this.redis.on('connect', () => {
+      console.log('Connected to Redis');
+    });
+  }
+
+  /**
+   * Creates a Redis client that supports both:
+   * - redis:// (no TLS, typically local)
+   * - rediss:// (TLS, typically hosted providers)
+   */
+  private createRedisClient(): IORedis {
+    const url = process.env['REDIS_URL'] || 'redis://localhost:6379';
+    const isTLS = url.startsWith('rediss://') || process.env['REDIS_TLS'] === 'true';
+
+    return new IORedis(url, {
+      maxRetriesPerRequest: 3,
+      retryDelayOnFailover: 100,
+      lazyConnect: true,
+      keepAlive: 30000,
+      family: 4, // IPv4
+      ...(isTLS ? { tls: {} } : {}),
+    });
+  }
+
+  async connect(): Promise<void> {
+    // If lazyConnect is enabled, connect() is required before use
+    await this.redis.connect();
+  }
+
+  // -------------------------
+  // Ticker caching
+  // -------------------------
+  async setTicker(marketId: string, ticker: Ticker, ttl: number = 5): Promise<void> {
+    const key = CacheKeys.TICKER(marketId);
+    const data = JSON.stringify(ticker, this.decimalReplacer);
+    await this.redis.setex(key, ttl, data);
+  }
+
+  async getTicker(marketId: string): Promise<Ticker | null> {
+    const key = CacheKeys.TICKER(marketId);
+    const data = await this.redis.get(key);
+    return data ? JSON.parse(data, this.decimalReviver) : null;
+  }
+
+  // -------------------------
+  // Order book caching
+  // -------------------------
+  async setOrderBook(marketId: string, orderBook: OrderBook, ttl: number = 1): Promise<void> {
+    const key = CacheKeys.ORDERBOOK(marketId);
+    const data = JSON.stringify(orderBook, this.decimalReplacer);
+    await this.redis.setex(key, ttl, data);
+  }
+
+  async getOrderBook(marketId: string): Promise<OrderBook | null> {
+    const key = CacheKeys.ORDERBOOK(marketId);
+    const data = await this.redis.get(key);
+    return data ? JSON.parse(data, this.decimalReviver) : null;
+  }
+
+  // -------------------------
+  // Candles caching
+  // -------------------------
+  async setCandles(
+    marketId: string,
+    interval: string,
+    candles: Candle[],
+    ttl: number = 300
+  ): Promise<void> {
+    const key = CacheKeys.CANDLES(marketId, interval);
+    const data = JSON.stringify(candles, this.decimalReplacer);
+    await this.redis.setex(key, ttl, data);
+  }
+
+  async getCandles(marketId: string, interval: string): Promise<Candle[] | null> {
+    const key = CacheKeys.CANDLES(marketId, interval);
+    const data = await this.redis.get(key);
+    return data ? JSON.parse(data, this.decimalReviver) : null;
+  }
+
+  // -------------------------
+  // Trades caching (Redis Streams)
+  // -------------------------
+  async addTrade(marketId: string, trade: Trade): Promise<void> {
+    const key = CacheKeys.TRADES(marketId);
+    const data = JSON.stringify(trade, this.decimalReplacer);
+
+    // Add to stream and trim to ~last 1000 entries
+    await this.redis.xadd(key, 'MAXLEN', '~', '1000', '*', 'data', data);
+  }
+
+  async getRecentTrades(marketId: string, count: number = 100): Promise<Trade[]> {
+    const key = CacheKeys.TRADES(marketId);
+    const result = await this.redis.xrevrange(key, '+', '-', 'COUNT', count);
+
+    return result
+      .map(([, fields]) => {
+        // fields = [k1, v1, k2, v2, ...]
+        const idx = fields.indexOf('data');
+        const data = idx >= 0 ? fields[idx + 1] : null;
+        if (!data) return null;
+        return JSON.parse(data, this.decimalReviver) as Trade;
+      })
+      .filter(Boolean) as Trade[];
+  }
+
+  // -------------------------
+  // Market list caching
+  // -------------------------
+  async setMarkets(markets: any[], ttl: number = 600): Promise<void> {
+    const key = CacheKeys.MARKETS;
+    const data = JSON.stringify(markets, this.decimalReplacer);
+    await this.redis.setex(key, ttl, data);
+  }
+
+  async getMarkets(): Promise<any[] | null> {
+    const key = CacheKeys.MARKETS;
+    const data = await this.redis.get(key);
+    return data ? JSON.parse(data, this.decimalReviver) : null;
+  }
+
+  // -------------------------
+  // Bulk operations
+  // -------------------------
+  async mget(keys: string[]): Promise<(string | null)[]> {
+    if (keys.length === 0) return [];
+    return await this.redis.mget(...keys);
+  }
+
+  async mset(keyValues: Record<string, string>, ttl?: number): Promise<void> {
+    const pipeline = this.redis.pipeline();
+
+    for (const [key, value] of Object.entries(keyValues)) {
+      if (ttl) pipeline.setex(key, ttl, value);
+      else pipeline.set(key, value);
+    }
+
+    await pipeline.exec();
+  }
+
+  // -------------------------
+  // SAFE pattern delete (SCAN instead of KEYS)
+  // -------------------------
+  async deletePattern(pattern: string): Promise<number> {
+    let cursor = '0';
+    let deleted = 0;
+
+    do {
+      const [nextCursor, keys] = await this.redis.scan(
+        cursor,
+        'MATCH',
+        pattern,
+        'COUNT',
+        '500'
+      );
+
+      cursor = nextCursor;
+
+      if (keys.length > 0) {
+        deleted += await this.redis.del(...keys);
+      }
+    } while (cursor !== '0');
+
+    return deleted;
+  }
+
+  // -------------------------
+  // Pub/Sub for real-time updates
+  // -------------------------
+  async publish(channel: string, message: any): Promise<void> {
+    const data = JSON.stringify(message, this.decimalReplacer);
+    await this.redis.publish(channel, data);
+  }
+
+  /**
+   * Subscribe once and reuse the subscriber connection
+   * (prevents “leaking” multiple Redis connections on reloads)
+   */
+  async subscribe(
+    channels: string[],
+    callback: (channel: string, message: any) => void
+  ): Promise<void> {
+    if (this.subscriber) return; // already subscribed
+
+    this.subscriber = this.createRedisClient();
+
+    this.subscriber.on('error', (err) => {
+      console.error('Redis subscriber error:', err);
+    });
+
+    this.subscriber.on('message', (channel, message) => {
+      try {
+        const data = JSON.parse(message, this.decimalReviver);
+        callback(channel, data);
+      } catch (error) {
+        console.error('Error parsing Redis message:', error);
+      }
+    });
+
+    await this.subscriber.subscribe(...channels);
+  }
+
+  // -------------------------
+  // Atomic counter (rate limiting, etc.)
+  // -------------------------
+  async increment(key: string, ttl?: number): Promise<number> {
+    const pipeline = this.redis.pipeline();
+    pipeline.incr(key);
+    if (ttl) pipeline.expire(key, ttl);
+    const results = await pipeline.exec();
+
+    // results format: [[null, value], [null, value], ...]
+    return (results?.[0]?.[1] as number) || 0;
+  }
+
+  // -------------------------
+  // Sorted sets (time-based data)
+  // -------------------------
+  async addToSortedSet(
+    key: string,
+    score: number,
+    member: string,
+    maxSize?: number
+  ): Promise<void> {
+    const pipeline = this.redis.pipeline();
+    pipeline.zadd(key, score, member);
+
+    if (maxSize) {
+      // Keep only the most recent entries
+      pipeline.zremrangebyrank(key, 0, -(maxSize + 1));
+    }
+
+    await pipeline.exec();
+  }
+
+  async getSortedSetRange(key: string, start: number = 0, stop: number = -1): Promise<string[]> {
+    return await this.redis.zrevrange(key, start, stop);
+  }
+
+  // -------------------------
+  // Health check
+  // -------------------------
+  async ping(): Promise<string> {
+    return await this.redis.ping();
+  }
+
+  // -------------------------
+  // Shutdown
+  // -------------------------
+  async disconnect(): Promise<void> {
+    if (this.subscriber) {
+      await this.subscriber.quit();
+      this.subscriber = undefined;
+    }
+    await this.redis.quit();
+  }
+
+  // -------------------------
+  // JSON serialization helpers for Decimal.js
+  // -------------------------
+  private decimalReplacer(key: string, value: any): any {
+    if (value instanceof Decimal) {
+      return { __type: 'Decimal', value: value.toString() };
+    }
+    return value;
+  }
+
+  private decimalReviver(key: string, value: any): any {
+    if (value && typeof value === 'object' && value.__type === 'Decimal') {
+      return new Decimal(value.value);
+    }
+    return value;
+  }
+}
+
+export const cacheService = new CacheService();

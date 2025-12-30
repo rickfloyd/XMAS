@@ -1,0 +1,11 @@
+TRADING Send a signal from Python (test immediately)
+
+Open a NEW PowerShell window and paste:
+
+python -c "import urllib.request, json; 
+data=json.dumps({'symbol':'EURUSD','action':'BUY','confidence':0.80,'tp_pips':40,'sl_pips':20}).encode(); 
+req=urllib.request.Request('http://127.0.0.1:5055/signal', data=data, headers={'Content-Type':'application/json'}); 
+print(urllib.request.urlopen(req).read().decode())"
+
+
+MT4 should pull it within ~5 seconds and place a trade (if AutoTrading is on).ING ENGINE "I DONT REMEMBER)

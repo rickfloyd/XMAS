@@ -1,0 +1,29 @@
+Data Coverage and Reliability 
+
+The biggest lie in finance platforms is silent data failure. A platform can have 1,800 symbols, but if 10% are stale or mismapped, traders stop trusting everything. Your strategy is smarter: start with fewer markets, make them rock-solid, and expand only after stability. Reliability becomes your brand.
+
+You already have multiple data providers. Your moat here is a redundancy layer + normalization. Redundancy means each market has a primary feed and an automatic fallback. Normalization means every asset has one internal symbol so users never see weird duplicates or missing charts. If a provider fails, Quantum doesn’t break; it switches or goes into “honest degraded mode.”
+
+“Honest degraded mode” is how you beat TradingView emotionally. Instead of failing quietly or spinning forever, you show last good price + timestamp + source. Traders respect honesty. That respect becomes loyalty.
+
+Steps
+
+Choose Day-1 markets only (FX majors, top crypto, gold, DXY, S&P/Nasdaq).
+
+Assign Primary + Backup provider per market.
+
+Build one internal symbol list that maps all providers to the same names.
+
+Set freshness targets per market (seconds for FX/crypto, minutes ok for indices).
+
+Cache lists/scanners; keep only open charts fully real-time.
+
+Create degraded mode UI: last price + timestamp + “data delayed” note.
+
+Display source quietly near price.
+
+Log every outage/lag automatically.
+
+Run 3 stress tests (quota hit, outage, traffic spike).
+
+Expand markets only after stability stays green for 30 days.

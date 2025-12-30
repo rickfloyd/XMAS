@@ -1,0 +1,156 @@
+1) Create the neon CSS file (this is the magic)
+✅ Step A — Make this file:
+
+src/styles/neon.css
+
+Copy/paste this whole file:
+
+/* src/styles/neon.css */
+
+/* ========== SECTION PURPLE HAZE ========== */
+.qc-section {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  padding: 18px;
+}
+
+/* Purple haze only inside the section */
+.qc-section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(900px 320px at 18% 0%, rgba(170, 70, 255, 0.45), transparent 55%),
+    radial-gradient(650px 320px at 78% 18%, rgba(0, 247, 255, 0.20), transparent 60%),
+    radial-gradient(900px 520px at 50% 100%, rgba(255, 0, 200, 0.18), transparent 55%);
+  filter: blur(6px);
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+/* Dark glass surface on top of haze */
+.qc-section::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+}
+
+/* Keep section content ABOVE haze layers */
+.qc-section > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ========== NEON CARD FRAME ========== */
+.qc-card {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(10px);
+  padding: 16px;
+}
+
+/* Gradient border frame */
+.qc-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px;            /* border thickness */
+  border-radius: 18px;
+  background: linear-gradient(90deg,
+    rgba(0,247,255,0.95),
+    rgba(180,0,255,0.95),
+    rgba(255,0,170,0.95),
+    rgba(255,130,0,0.85)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Extreme glow halo OUTSIDE card */
+.qc-card::after {
+  content: "";
+  position: absolute;
+  inset: -12px;            /* spreads glow beyond card */
+  border-radius: 22px;
+  background: radial-gradient(circle at 20% 20%,
+    rgba(0,247,255,0.45),
+    rgba(180,0,255,0.25),
+    rgba(255,0,170,0.18),
+    transparent 65%
+  );
+  filter: blur(14px);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+/* Extra punch: outer + inner shadows */
+.qc-card {
+  box-shadow:
+    0 0 18px rgba(0, 247, 255, 0.20),
+    0 0 26px rgba(180, 0, 255, 0.18),
+    0 0 34px rgba(255, 0, 170, 0.16),
+    inset 0 0 18px rgba(0, 247, 255, 0.08),
+    inset 0 0 20px rgba(255, 0, 170, 0.06);
+}
+
+/* Optional: small “pulse” without being annoying */
+@keyframes qcPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.08); }
+}
+.qc-pulse {
+  animation: qcPulse 3.2s ease-in-out infinite;
+}
+
+2) Import it so it actually runs
+✅ Step B — Open:
+
+src/main.tsx (or src/main.jsx)
+
+Add this line near the top (above your app render):
+
+import "./styles/neon.css";
+
+3) Use it on sections + cards
+✅ Step C — Example usage in any component
+
+Wrap a “purple section” like this:
+
+<div className="qc-section">
+  <h2 className="text-white text-xl font-semibold mb-4">Market Data</h2>
+
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="qc-card qc-pulse">
+      <div className="text-white font-bold">AAPL</div>
+      <div className="text-sm text-white/70">Apple Inc.</div>
+    </div>
+
+    <div className="qc-card">
+      <div className="text-white font-bold">GOOGL</div>
+      <div className="text-sm text-white/70">Alphabet Inc.</div>
+    </div>
+
+    <div className="qc-card">
+      <div className="text-white font-bold">MSFT</div>
+      <div className="text-sm text-white/70">Microsoft Corp.</div>
+    </div>
+  </div>
+</div>
+
+
+That gives you purple background only for the section, and extreme neon around each card.
+
+If you want the glow color to change per card
+
+Tell me: “random neon” or “fixed per category”
+and I’ll give you the next snippet (adds data-accent="pink|cyan|orange|purple" and changes the border/glow automatically).

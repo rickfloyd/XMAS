@@ -1,0 +1,31 @@
+MODES
+
+Modes That Let You Serve Everyone
+
+“Everything to everyone” is only possible if users feel like Quantum was built for their mind. Modes solve that by giving different traders different default cockpits while sharing the same engine underneath.
+
+Each mode must have: a default layout, a simple mission, and one KPI. Example: Scalper mode = speed and clean entries; Investor mode = macro context and calmness. Modes aren’t labels—they’re tuned experiences. Users should be able to switch without losing settings, and the universal elements (search, timeframe, save plan) must stay identical to preserve muscle memory.
+
+Your signature mode is the one that goes viral—probably the Trader mode that feels like TradingView power with 70% less noise. That is your “home base” for growth.
+
+Steps
+
+Finalize up to 6 modes (Beginner, Swing, Day, Scalper, Investor, Crypto-native).
+
+Define default layout per mode on paper.
+
+Define one KPI per mode (speed, clarity, retention).
+
+Make mode switching preserve user settings.
+
+Keep universal controls identical across modes.
+
+Create a <3-minute intro per mode.
+
+Auto-suggest a mode after 3 sessions.
+
+Explain why some tools are hidden per mode.
+
+Choose one signature mode for marketing.
+
+Ship modes as presets first; refine later.

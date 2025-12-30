@@ -1,0 +1,307 @@
+src\database\index.ts 
+import { Pool, Client } from 'pg';
+import { Decimal } from 'decimal.js';
+import { Market, Trade, Candle, MarketStatus, TradeSide, CandleInterval } from '@/types';
+
+export class Database {
+  private pool: Pool;
+
+  constructor() {
+    this.pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: parseInt(process.env.DB_POOL_SIZE || '25'),
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+    });
+  }
+
+  async initialize(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await this.createTables(client);
+      await this.createIndexes(client);
+      console.log('Database initialized successfully');
+    } finally {
+      client.release();
+    }
+  }
+
+  private async createTables(client: Client): Promise<void> {
+    // Markets table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS markets (
+        id VARCHAR(20) PRIMARY KEY,
+        base_asset VARCHAR(10) NOT NULL,
+        quote_asset VARCHAR(10) NOT NULL,
+        price_precision INTEGER NOT NULL DEFAULT 8,
+        amount_precision INTEGER NOT NULL DEFAULT 8,
+        min_price DECIMAL(32,16) NOT NULL DEFAULT 0,
+        max_price DECIMAL(32,16) NOT NULL DEFAULT 999999999,
+        min_amount DECIMAL(32,16) NOT NULL DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // Trades table (partitioned by time for performance)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS trades (
+        id BIGSERIAL,
+        market_id VARCHAR(20) NOT NULL REFERENCES markets(id),
+        price DECIMAL(32,16) NOT NULL,
+        amount DECIMAL(32,16) NOT NULL,
+        total DECIMAL(32,16) NOT NULL,
+        side VARCHAR(4) NOT NULL CHECK (side IN ('buy', 'sell')),
+        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        maker_order_id VARCHAR(50),
+        taker_order_id VARCHAR(50),
+        PRIMARY KEY (id, timestamp)
+      ) PARTITION BY RANGE (timestamp);
+    `);
+
+    // OHLCV candles table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS candles (
+        market_id VARCHAR(20) NOT NULL REFERENCES markets(id),
+        interval VARCHAR(5) NOT NULL,
+        open_time TIMESTAMPTZ NOT NULL,
+        close_time TIMESTAMPTZ NOT NULL,
+        open_price DECIMAL(32,16) NOT NULL,
+        high_price DECIMAL(32,16) NOT NULL,
+        low_price DECIMAL(32,16) NOT NULL,
+        close_price DECIMAL(32,16) NOT NULL,
+        volume DECIMAL(32,16) NOT NULL DEFAULT 0,
+        quote_volume DECIMAL(32,16) NOT NULL DEFAULT 0,
+        trades_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (market_id, interval, open_time)
+      );
+    `);
+
+    // Create current month partition for trades
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 7);
+    
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS trades_${currentMonth.replace('-', '_')} 
+      PARTITION OF trades 
+      FOR VALUES FROM ('${currentMonth}-01') TO ('${nextMonth}-01');
+    `).catch(() => {}); // Ignore if already exists
+  }
+
+  private async createIndexes(client: Client): Promise<void> {
+    // High-performance indexes for common queries
+    const indexes = [
+      // Trades indexes
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trades_market_time 
+       ON trades (market_id, timestamp DESC)`,
+      
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trades_timestamp_brin 
+       ON trades USING BRIN (timestamp)`,
+      
+      // Candles indexes
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_candles_market_interval_time 
+       ON candles (market_id, interval, open_time DESC)`,
+      
+      // Markets indexes
+      `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_markets_status 
+       ON markets (status) WHERE status = 'active'`
+    ];
+
+    for (const indexQuery of indexes) {
+      try {
+        await client.query(indexQuery);
+      } catch (error) {
+        console.log('Index already exists or failed to create:', error);
+      }
+    }
+  }
+
+  // Market operations
+  async getMarkets(status?: MarketStatus): Promise<Market[]> {
+    const query = status 
+      ? 'SELECT * FROM markets WHERE status = $1 ORDER BY id'
+      : 'SELECT * FROM markets ORDER BY id';
+    
+    const params = status ? [status] : [];
+    const result = await this.pool.query(query, params);
+    
+    return result.rows.map(this.mapRowToMarket);
+  }
+
+  async getMarket(marketId: string): Promise<Market | null> {
+    const result = await this.pool.query('SELECT * FROM markets WHERE id = $1', [marketId]);
+    return result.rows[0] ? this.mapRowToMarket(result.rows[0]) : null;
+  }
+
+  // Trade operations
+  async insertTrade(trade: Omit<Trade, 'id'>): Promise<Trade> {
+    const query = `
+      INSERT INTO trades (market_id, price, amount, total, side, timestamp, maker_order_id, taker_order_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *
+    `;
+    
+    const values = [
+      trade.marketId,
+      trade.price.toString(),
+      trade.amount.toString(),
+      trade.total.toString(),
+      trade.side,
+      trade.timestamp,
+      trade.makerOrderId || null,
+      trade.takerOrderId || null
+    ];
+
+    const result = await this.pool.query(query, values);
+    return this.mapRowToTrade(result.rows[0]);
+  }
+
+  async getRecentTrades(marketId: string, limit: number = 100): Promise<Trade[]> {
+    const query = `
+      SELECT * FROM trades 
+      WHERE market_id = $1 
+      ORDER BY timestamp DESC 
+      LIMIT $2
+    `;
+    
+    const result = await this.pool.query(query, [marketId, limit]);
+    return result.rows.map(this.mapRowToTrade);
+  }
+
+  async getTradesSince(marketId: string, since: Date, limit: number = 1000): Promise<Trade[]> {
+    const query = `
+      SELECT * FROM trades 
+      WHERE market_id = $1 AND timestamp > $2 
+      ORDER BY timestamp DESC 
+      LIMIT $3
+    `;
+    
+    const result = await this.pool.query(query, [marketId, since, limit]);
+    return result.rows.map(this.mapRowToTrade);
+  }
+
+  // Candle operations
+  async getCandles(
+    marketId: string, 
+    interval: CandleInterval, 
+    from?: Date, 
+    to?: Date, 
+    limit: number = 500
+  ): Promise<Candle[]> {
+    let query = `
+      SELECT * FROM candles 
+      WHERE market_id = $1 AND interval = $2
+    `;
+    
+    const params: any[] = [marketId, interval];
+    let paramIndex = 3;
+
+    if (from) {
+      query += ` AND open_time >= $${paramIndex}`;
+      params.push(from);
+      paramIndex++;
+    }
+
+    if (to) {
+      query += ` AND open_time <= $${paramIndex}`;
+      params.push(to);
+      paramIndex++;
+    }
+
+    query += ` ORDER BY open_time DESC LIMIT $${paramIndex}`;
+    params.push(limit);
+
+    const result = await this.pool.query(query, params);
+    return result.rows.map(this.mapRowToCandle).reverse(); // Return in ascending order
+  }
+
+  async insertCandle(candle: Candle): Promise<void> {
+    const query = `
+      INSERT INTO candles (
+        market_id, interval, open_time, close_time, 
+        open_price, high_price, low_price, close_price,
+        volume, quote_volume, trades_count
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (market_id, interval, open_time) 
+      DO UPDATE SET
+        close_time = EXCLUDED.close_time,
+        high_price = EXCLUDED.high_price,
+        low_price = EXCLUDED.low_price,
+        close_price = EXCLUDED.close_price,
+        volume = EXCLUDED.volume,
+        quote_volume = EXCLUDED.quote_volume,
+        trades_count = EXCLUDED.trades_count
+    `;
+
+    const values = [
+      candle.marketId,
+      candle.interval,
+      candle.openTime,
+      candle.closeTime,
+      candle.open.toString(),
+      candle.high.toString(),
+      candle.low.toString(),
+      candle.close.toString(),
+      candle.volume.toString(),
+      candle.quoteVolume.toString(),
+      candle.trades
+    ];
+
+    await this.pool.query(query, values);
+  }
+
+  // Row mapping functions
+  private mapRowToMarket(row: any): Market {
+    return {
+      id: row.id,
+      baseAsset: row.base_asset,
+      quoteAsset: row.quote_asset,
+      pricePrecision: row.price_precision,
+      amountPrecision: row.amount_precision,
+      minPrice: new Decimal(row.min_price),
+      maxPrice: new Decimal(row.max_price),
+      minAmount: new Decimal(row.min_amount),
+      status: row.status as MarketStatus,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  private mapRowToTrade(row: any): Trade {
+    return {
+      id: row.id.toString(),
+      marketId: row.market_id,
+      price: new Decimal(row.price),
+      amount: new Decimal(row.amount),
+      total: new Decimal(row.total),
+      side: row.side as TradeSide,
+      timestamp: row.timestamp,
+      makerOrderId: row.maker_order_id,
+      takerOrderId: row.taker_order_id
+    };
+  }
+
+  private mapRowToCandle(row: any): Candle {
+    return {
+      marketId: row.market_id,
+      interval: row.interval as CandleInterval,
+      openTime: row.open_time,
+      closeTime: row.close_time,
+      open: new Decimal(row.open_price),
+      high: new Decimal(row.high_price),
+      low: new Decimal(row.low_price),
+      close: new Decimal(row.close_price),
+      volume: new Decimal(row.volume),
+      quoteVolume: new Decimal(row.quote_volume),
+      trades: row.trades_count
+    };
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
+}
+
+export const db = new Database();

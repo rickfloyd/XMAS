@@ -1,0 +1,31 @@
+NORTHERN STAR  
+
+LEVEL 1 — North Star, First Tribe, and the Real Enemy
+
+Quantum Charts can beat TradingView only if it wins one tribe first, then expands. TradingView’s power is also its weakness: it tries to serve everyone at once, so the interface becomes a junkyard of features, opinions, and distractions. Your edge is clarity. The first tribe should be the group that feels this pain the most and spreads fast when helped—retail FX + crypto traders who want pro power without mental overload. When you lock this tribe, you create a beachhead that funds everything else.
+
+The “North Star” is not a slogan. It’s a filter that decides what gets built and what gets killed. Every feature you add either makes the user’s daily loop easier or it doesn’t. Your loop is: scan → see clean setup → get evidence/risk plan → save/share/execute → review. If a feature doesn’t strengthen that loop for your first tribe, you don’t ship it yet. That’s how you avoid becoming the next clutter monster.
+
+Your sacred values are the moat: clarity-first, anti-scam, neutral evidence, accessibility, and global friendliness. These are not marketing words; they become design requirements and policy hard-stops. That’s how you become “everything to every trader” without becoming a sellout—because the foundation is aligned before growth tempts you.
+
+Steps
+
+Open Notepad and create a file called Quantum_NorthStar.txt.
+
+Write your First Tribe in one line: “Retail FX + crypto traders who need clarity.”
+
+Write the #1 pain they feel daily on other sites (overwhelm/noise/scam vibes).
+
+Write the daily loop in 5 verbs: Scan → Chart → Plan → Execute/Share → Review.
+
+List 3 Year-1 measurable goals (users, retention, revenue).
+
+List 5 sacred values.
+
+List 3 “we do NOT do this” rules (e.g., pumps, pay-to-rank, chaos UI).
+
+Print this page.
+
+Tape it to your monitor.
+
+Use it to approve/deny every future feature.

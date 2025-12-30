@@ -1,0 +1,29 @@
+Power Without Clutter 
+
+TradingView makes users hunt for power inside noise. Quantum must do the opposite: power is there, but hidden until called. The way you do that is with modes/presets and progressive disclosure. Beginners see a calm cockpit. Pros can unfold the full war room instantly. Same engine, different dashboards. You already think this way.
+
+Your default UI should be the cleanest possible control center: a watchlist, a main chart, and a small “what matters now” panel. Then above that, a mode switch. When a user flips modes, they’re not “unlocking more junk,” they’re entering a tuned workspace for their style. This lets you serve everyone without drowning anyone.
+
+The strongest principle here: reduce steps, reduce choice, reduce visual noise. Every extra click, every extra panel, every extra neon object that isn’t tied to meaning will cut retention. You want users to feel “I can breathe here.” Then, once they trust the space, you offer deeper tools.
+
+Steps
+
+Define 3 modes now: Beginner / Trader / Pro.
+
+For each mode, list exactly what’s on screen by default (no maybes).
+
+Create the “Always-Visible 5” actions: Search, Timeframe, Add Tool, Save Plan, Share.
+
+Create a “Hidden by Default” list of all advanced items.
+
+Sketch the 3 workflows on paper and remove one step from each.
+
+Decide one visual hierarchy rule (size/color = importance).
+
+Build mobile layouts first (thumb actions low).
+
+Limit onboarding to mode pick + market pick + first chart.
+
+Ship a minimal version that feels calm.
+
+Add features only when a workflow demands it.

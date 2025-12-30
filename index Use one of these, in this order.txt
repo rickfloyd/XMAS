@@ -1,0 +1,50 @@
+Use one of these, in this order:
+
+server.ts (best / most common)
+
+src/server.ts (if you have a src folder)
+
+index.ts (if your project already uses index)
+
+Where to put it
+
+Put it in the folder where these relative imports will work:
+
+import { db } from './database';
+import { cacheService } from './services/cache';
+import { chartController } from './controllers/charts';
+import { WebSocketService } from './services/websocket';
+
+
+That means the file must sit next to:
+
+database.ts
+
+the services/ folder
+
+the controllers/ folder
+
+So your folder should look like this:
+
+src/
+  server.ts    <-- this file
+  database.ts
+  controllers/
+    charts.ts
+  services/
+    cache.ts
+    websocket.ts
+  types/
+    ...
+
+Notepad steps (fast)
+
+Open Notepad
+
+Paste the code
+
+Save As
+
+Save as type: All Files
+
+File name: server.ts

@@ -1,0 +1,48 @@
+BACKUP
+
+{
+  "project": "AI Quantum Charts",
+  "owner": "Rick Floyd",
+  "date": "2025-11-20",
+  "stack": {
+    "frontend": ["Next.js", "TailwindCSS", "React"],
+    "backend": ["Firebase Functions", "PostgreSQL", "Firestore"],
+    "ai": ["Transformers", "Torch", "Firebase ML Kit"]
+  },
+  "routes": [
+    "/hyper-view",
+    "/simple-view",
+    "/custom-quant",
+    "/neuroplayground",
+    "/broadcast-hub",
+    "/guiltypleasures"
+  ],
+  "firebase": {
+    "collections": ["users", "strategies", "tos-acceptance"],
+    "secrets": [
+      "firebaseApiKeySecret",
+      "firebaseAuthDomainSecret",
+      "firebasePrivateKeySecret"
+    ]
+  },
+  "ai_personalities": [
+    "Republican", "Democrat", "Liberal", "Independent"
+  ],
+  "apis": {
+    "YouTube": "YouTube Data API v3",
+    "GoogleMaps": "Geolocation & Food APIs",
+    "EODHD": "Market Data Feed",
+    "OpenAI": "Text & Strategy Inference"
+  },
+  "scripts": {
+    "restore": "restore_firebase.sh",
+    "backup": "backup_firestore.sh"
+  },
+  "next_tasks": [
+    "Broadcast Hub UI",
+    "AI Trade Assistant",
+    "Global Food API integration",
+    "Theme Switcher",
+    "Expo Mobile build"
+  ]
+}

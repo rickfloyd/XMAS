@@ -1,0 +1,29 @@
+Step-by-step (do not improvise)
+
+Right-click anywhere inside Firebase Studio
+
+Click Inspect
+
+Click the Console tab
+
+Click View → Chat again
+
+Watch the console
+
+You will see one of these (or similar):
+
+403 Forbidden
+
+assistant disabled
+
+feature unavailable
+
+quota exceeded
+
+permission denied
+
+assistant capability not enabled
+
+That is Google saying:
+
+“This workspace is not allowed to use Gemini anymore.”

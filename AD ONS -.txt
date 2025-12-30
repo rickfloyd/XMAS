@@ -1,0 +1,162 @@
+AD ONS -
+
+1. Political Personality Modes
+
+(4 add-ons)
+
+Republican feed
+
+Democrat feed
+
+Liberal feed
+
+Independent feed
+➡ Each opens a customized UI + live NewsData.io feeds + recommended media.
+
+2. Food Delivery / GPS Card
+
+(1 add-on)
+
+Lyft / DoorDash / Uber Eats / Postmates / Top 10 delivery apps
+
+Card auto-links using Google Maps API
+
+3. Accessibility & Disability Modes
+
+(6 add-ons)
+
+Color-blindness visual modes
+
+Epilepsy-safe low-flash mode
+
+Motor-skill impaired “twitch/tick protection”
+
+Voice-only trading mode
+
+Paralysis verbal trading
+
+WCAG-W3C compliance button + profiles
+
+4. Educational Games
+
+(4 add-ons)
+
+Zelda-style “chart pattern bosses”
+
+15-minute mini-games for each chart pattern
+
+Coloring-book market education
+
+Monopoly / Candyland simplified money games
+
+5. Trading Subject Categories
+
+(1 add-on)
+(From your table)
+
+Forex
+
+Crypto
+
+Stocks
+
+Metals
+
+Indices
+
+Futures
+
+Bonds
+
+Options
+
+Sports Markets
+… and so on (total 15+ categories you want on the site)
+
+6. International Markets Page
+
+(1 add-on)
+
+List of top 18 global market indexes
+(Stocks, Futures, Forex, Crypto, Bonds, Metals, etc.)
+
+7. Verbal AI Trading Engine
+
+(1 add-on)
+
+Full front-end + back-end voice-command trading system
+
+Executes live trades via your broker API
+
+Firebase-friendly model
+
+8. Medical Impairment Selector
+
+(1 add-on)
+
+User chooses their vision/hearing/motor condition
+
+UI auto-adjusts colors, fonts, flash, animations
+
+9. Pop-Up Assistive Check
+
+(1 add-on)
+
+25-second pop-up asking:
+“Do you have a twitch or tick that causes accidental taps?”
+
+10. Firebase ML / Language Model Bridge
+
+(1 add-on)
+
+Bridge between all language models (Python + Firebase)
+
+Allows everything to communicate safely
+
+Multi-personality AI engine
+
+11. Anti-Penetration Security Layer
+
+(1 add-on)
+
+Security layer to prevent file penetration
+
+Obfuscation + Firebase rule locks + honeypots
+
+12. Multi-UI Mode
+
+(1 add-on)
+
+Duplicate first UI with identical blank boxes
+
+No labels
+
+Same neon theme
+
+Switchable inside Firebase
+
+13. Political WC3 + WC3-Style Pages
+
+(1 add-on)
+
+Each political group eventually gets its own standalone page
+
+WC3 compliant
+
+Media, links, feeds in their own area
+
+14. Delivery of URLs / APIs for Personalities
+
+(1 add-on)
+
+The URLs that power each political UI
+
+NewsData.io
+
+Social media RSS
+
+Podcast RSS
+
+Magazine RSS
+
+YouTube feeds
